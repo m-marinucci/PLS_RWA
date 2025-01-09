@@ -27,8 +27,12 @@ def setup_git():
         run_command('git add .', 'Adding all files to git')
         run_command('git commit -m "Initial commit"', 'Creating initial commit')
     
-    # Create and switch to fix_importance branch
-    run_command('git checkout -b fix_importance', 'Creating fix_importance branch')
+    # Try to switch to fix_importance branch if it exists, create it if it doesn't
+    result = subprocess.run('git checkout fix_importance 2>/dev/null', shell=True)
+    if result.returncode != 0:
+        run_command('git checkout -b fix_importance', 'Creating fix_importance branch')
+    else:
+        print("Switched to existing fix_importance branch")
 
 def setup_environment():
     """Install required packages."""
