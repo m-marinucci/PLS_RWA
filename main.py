@@ -3,7 +3,7 @@ import pandas as pd
 from itertools import product
 from factors import (
     generate_X, generate_y, get_true_importance,
-    do_pls_vip, compute_rwa, top_k_accuracy
+    do_pls_vip, compute_rwa, top_k_accuracy, discretize_data
 )
 
 def format_results(results_df):
@@ -16,11 +16,12 @@ def format_results(results_df):
     results_df['rho'] = results_df['rho'].astype(float)
     results_df['method'] = results_df['method'].astype(str)
     results_df['top_k_acc'] = results_df['top_k_acc'].astype(float)
+    results_df['data_type'] = results_df['data_type'].astype(str)
     
     return results_df
 
 def main_fractional_simulation(
-    n_reps=100,
+    n_reps=1000,
     random_state=42,
     alpha=0.3,  # Proportion of important predictors
     randomize_importance=True  # Whether to randomize important variables
@@ -35,7 +36,8 @@ def main_fractional_simulation(
         'J': [7, 11, 20],
         'magnitude': ['low', 'medium', 'high'],
         'noise': ['low', 'medium', 'high'],
-        'rho': [0.0, 0.5, 0.95]
+        'rho': [0.0, 0.5, 0.95],
+        'data_type': ['continuous', 'discrete']
     }
     
     # Create all combinations of parameters
@@ -44,15 +46,16 @@ def main_fractional_simulation(
         param_grid['J'],
         param_grid['magnitude'],
         param_grid['noise'],
-        param_grid['rho']
+        param_grid['rho'],
+        param_grid['data_type']
     ))
     
     # Initialize results list
     results = []
     
     # Loop over parameter combinations
-    for n, J, magnitude, noise, rho in param_combinations:
-        print(f"\nRunning simulation for n={n}, J={J}, magnitude={magnitude}, noise={noise}, rho={rho}")
+    for n, J, magnitude, noise, rho, data_type in param_combinations:
+        print(f"\nRunning simulation for n={n}, J={J}, magnitude={magnitude}, noise={noise}, rho={rho}, data_type={data_type}")
         
         # Run multiple replications
         for rep in range(n_reps):
@@ -60,14 +63,14 @@ def main_fractional_simulation(
                 print(f"  Replication {rep+1}/{n_reps}")
             
             try:
-                # Generate predictors
+                # Generate continuous predictors and response
                 X = generate_X(n=n, J=J, rho=rho, random_state=rng)
-                
-                # Get important variables
                 important_vars = get_true_importance(J, alpha=alpha, randomize=randomize_importance, rng=rng)
-                
-                # Generate response
                 y = generate_y(X, important_vars, magnitude=magnitude, noise_label=noise, rng=rng)
+                
+                # Discretize if needed
+                if data_type == 'discrete':
+                    X, y = discretize_data(X, y, X_points=5, y_points=7)
                 
                 # Compute PLS-VIP scores
                 try:
@@ -80,6 +83,7 @@ def main_fractional_simulation(
                             'magnitude': magnitude,
                             'noise': noise,
                             'rho': rho,
+                            'data_type': data_type,
                             'method': 'PLS-VIP',
                             'top_k_acc': vip_acc,
                             'valid_run': True
@@ -92,6 +96,7 @@ def main_fractional_simulation(
                         'magnitude': magnitude,
                         'noise': noise,
                         'rho': rho,
+                        'data_type': data_type,
                         'method': 'PLS-VIP',
                         'top_k_acc': np.nan,
                         'valid_run': False
@@ -108,6 +113,7 @@ def main_fractional_simulation(
                             'magnitude': magnitude,
                             'noise': noise,
                             'rho': rho,
+                            'data_type': data_type,
                             'method': 'RWA',
                             'top_k_acc': rwa_acc,
                             'valid_run': True
@@ -120,6 +126,7 @@ def main_fractional_simulation(
                         'magnitude': magnitude,
                         'noise': noise,
                         'rho': rho,
+                        'data_type': data_type,
                         'method': 'RWA',
                         'top_k_acc': np.nan,
                         'valid_run': False
@@ -158,14 +165,14 @@ def estimate_runtime(n_reps=5):
 def analyze_performance(results_df):
     """Analyze and print performance metrics."""
     # Calculate overall performance
-    overall = results_df.groupby('method')['top_k_acc'].agg(['mean', 'std', 'count'])
+    overall = results_df.groupby(['method', 'data_type'])['top_k_acc'].agg(['mean', 'std', 'count'])
     print("\nOverall Performance:")
     print(overall)
     
     # Calculate performance by parameter
     for param in ['n', 'J', 'magnitude', 'noise', 'rho']:
         print(f"\nPerformance by {param}:")
-        by_param = results_df.groupby(['method', param])['top_k_acc'].agg(['mean', 'std', 'count'])
+        by_param = results_df.groupby(['method', 'data_type', param])['top_k_acc'].agg(['mean', 'std', 'count'])
         print(by_param)
     
     return overall

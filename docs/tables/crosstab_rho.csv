@@ -1,0 +1,7 @@
+method,rho,High
+PLS-VIP,0.0,1.0
+PLS-VIP,0.5,1.0
+PLS-VIP,0.95,1.0
+RWA,0.0,1.0
+RWA,0.5,1.0
+RWA,0.95,1.0

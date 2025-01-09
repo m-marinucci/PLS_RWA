@@ -401,3 +401,38 @@ def compute_top_k_accuracy(true_importance, est_importance, k=1):
     # Compute overlap
     overlap = len(set(true_top_k) & set(top_k_indices))
     return overlap / k
+
+###############################################################################
+# 10) discretize_data(X, y, X_points=5, y_points=7)
+###############################################################################
+def discretize_data(X, y, X_points=5, y_points=7):
+    """Discretize continuous data into Likert scales using percentiles.
+    
+    Args:
+        X: Predictor matrix (continuous)
+        y: Response vector (continuous)
+        X_points: Number of points for X Likert scale (default: 5)
+        y_points: Number of points for y Likert scale (default: 7)
+    
+    Returns:
+        tuple: (X_discrete, y_discrete)
+    """
+    # Convert X to Likert scale
+    X_discrete = np.zeros_like(X)
+    for j in range(X.shape[1]):
+        # Calculate percentile bins for X
+        bins = np.percentile(X[:, j], np.linspace(0, 100, X_points + 1))
+        # Ensure unique bins
+        bins = np.unique(bins)
+        # Digitize into X_points levels (1 to X_points)
+        X_discrete[:, j] = np.digitize(X[:, j], bins[:-1], right=True) + 1
+    
+    # Convert y to Likert scale
+    # Calculate percentile bins for y
+    y_bins = np.percentile(y, np.linspace(0, 100, y_points + 1))
+    # Ensure unique bins
+    y_bins = np.unique(y_bins)
+    # Digitize into y_points levels (1 to y_points)
+    y_discrete = np.digitize(y, y_bins[:-1], right=True) + 1
+    
+    return X_discrete, y_discrete
