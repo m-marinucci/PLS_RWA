@@ -1,0 +1,372 @@
+import numpy as np
+from sklearn.cross_decomposition import PLSRegression  # type: ignore
+from sklearn.preprocessing import StandardScaler  # type: ignore
+
+###############################################################################
+# 1) generate_true_betas(J, magnitude, rng)
+###############################################################################
+def generate_true_betas(J, magnitude, rng):
+    """Generate sorted betas for the chosen magnitude.
+    
+    Args:
+        J (int): Number of predictors
+        magnitude (str): 'low', 'medium', or 'high'
+        rng: numpy random number generator
+    
+    Returns:
+        numpy array: Sorted beta coefficients
+    """
+    if magnitude == 'Beta high':
+        scale = 3.0
+    elif magnitude == 'Beta medium':
+        scale = 1.5
+    else:  # low
+        scale = 0.5
+    
+    raw = rng.uniform(low=0.2, high=1.0, size=J) * scale
+    return -np.sort(-raw)  # Sort in descending order
+
+###############################################################################
+# 2) simulate_one_rep(n, J, beta, noise_var, rho, rng)
+###############################################################################
+def simulate_one_rep(n, J, beta, noise_var, rho, rng):
+    """Generate one replication of data.
+    
+    Args:
+        n (int): Sample size
+        J (int): Number of predictors
+        beta (array): True coefficients
+        noise_var (float): Noise variance
+        rho (float): Correlation between predictors
+        rng: numpy random number generator
+    
+    Returns:
+        tuple: (X, y) or (None, None) if correlation matrix is invalid
+    """
+    if not (0 <= rho < 1):
+        return None, None
+    
+    # Create correlation matrix
+    R = np.full((J, J), rho)
+    np.fill_diagonal(R, 1.0)
+    
+    try:
+        # Generate multivariate normal X
+        L = np.linalg.cholesky(R)
+        X = rng.standard_normal(size=(n, J))
+        X = X @ L
+        
+        # Standardize X
+        scaler = StandardScaler()
+        X = scaler.fit_transform(X)
+        
+        # Generate y with specified noise variance
+        epsilon = np.sqrt(noise_var) * rng.standard_normal(size=n)
+        y = X @ beta + epsilon
+        
+        return X, y
+    except np.linalg.LinAlgError:
+        return None, None
+
+###############################################################################
+# 3) compute_rwa(X, y)
+###############################################################################
+def compute_rwa(X, y):
+    """Perform classical Johnson's Relative Weight Analysis (RWA).
+    
+    Args:
+        X: Predictor matrix
+        y: Response vector
+        
+    Returns:
+        array: RWA importance scores that sum to total R^2
+    """
+    # 1) Standardize X and y
+    Xs = (X - X.mean(axis=0)) / X.std(axis=0, ddof=1)
+    ys = (y - y.mean()) / y.std(ddof=1)
+    
+    n, p = Xs.shape
+    
+    # 2) Correlation matrix of X (since Xs is standardized)
+    R = np.corrcoef(Xs, rowvar=False)  # shape (p, p)
+    
+    # 3) Eigen-decomposition of R
+    #    eigenvalues (evals), eigenvectors (evecs) in ascending order => reverse sort
+    evals, evecs = np.linalg.eigh(R)
+    idx = np.argsort(evals)[::-1]   # largest first
+    evals = evals[idx]
+    evecs = evecs[:, idx]           # reorder columns to match sorted evals
+    
+    # 4) Construct principal components Z = Xs @ evecs
+    Z = Xs @ evecs  # shape (n, p), columns = principal component scores
+    
+    # 5) Regress ys on Z => bZ = (Z^T Z)^{-1} Z^T ys
+    #    This tells us how each component predicts y
+    bZ, _, _, _ = np.linalg.lstsq(Z, ys, rcond=None)  # shape (p,)
+    
+    # The total R^2 from this regression:
+    yhat = Z @ bZ
+    ss_total = np.sum(ys**2)
+    ss_resid = np.sum((ys - yhat)**2)
+    R2 = 1.0 - ss_resid/ss_total
+    
+    # 6) Compute Johnson's raw relative weights
+    #    Formula: RW_j = sum_k [ bZ_k * sqrt(evals[k]) * evecs[j, k] ]^2
+    RW = np.zeros(p)
+    for j in range(p):
+        for k in range(p):
+            RW[j] += (bZ[k] * np.sqrt(evals[k]) * evecs[j, k])**2
+    
+    # 7) Scale so sum_j RW_j = R^2
+    sum_RW = RW.sum()
+    if sum_RW > 0:
+        RW *= (R2 / sum_RW)
+    
+    return RW
+
+###############################################################################
+# 4) do_pls_vip(X, y, n_components=2)
+###############################################################################
+def do_pls_vip(X, y, n_components=2):
+    """Compute VIP scores using PLS regression.
+    
+    Args:
+        X (array): Predictor matrix
+        y (array): Response vector
+        n_components (int): Number of PLS components
+    
+    Returns:
+        array: VIP scores, one per predictor (shape: (p,))
+    """
+    # Ensure inputs are numpy arrays and get dimensions early
+    try:
+        X = np.asarray(X)
+        p = X.shape[1]  # Get number of predictors early
+    except:
+        print("PLS-VIP error: Invalid input X")
+        return np.array([0.0])  # Return single zero if we can't even get X shape
+        
+    try:
+        y = np.asarray(y)
+        n = X.shape[0]
+        
+        # Ensure n_components is valid
+        n_components = min(n_components, p, n-1)  # n-1 to ensure we don't overfit
+        if n_components < 1:
+            n_components = 1
+            
+        # Fit PLS
+        pls = PLSRegression(n_components=n_components)
+        pls.fit(X, y.reshape(-1, 1))
+        
+        # Get PLS quantities
+        W = pls.x_weights_      # shape (p, n_components)
+        T = pls.x_scores_       # shape (n, n_components)
+        Q = pls.y_loadings_     # shape (n_components, 1)
+        
+        # Compute fraction of Y-variance explained by each component
+        SSY_component = np.zeros(n_components)
+        for a in range(n_components):
+            comp_pred = T[:, a] * Q[a, 0]
+            SSY_component[a] = np.sum(comp_pred**2)
+            
+        total_SS = np.sum(SSY_component)
+        if total_SS > 0:
+            fraction_of_Y = SSY_component / total_SS
+        else:
+            fraction_of_Y = np.ones(n_components) / n_components
+        
+        # Compute VIP for each predictor
+        vip_scores = np.zeros(p)
+        for j in range(p):
+            sum_term = 0
+            for a in range(n_components):
+                w_sum = np.sum(W[:, a]**2)
+                if w_sum > 0:  # Avoid division by zero
+                    sum_term += fraction_of_Y[a] * (W[j, a]**2 / w_sum)
+            vip_scores[j] = np.sqrt(p * sum_term)
+        
+        return vip_scores
+        
+    except Exception as e:
+        print(f"PLS-VIP error: {str(e)}")
+        return np.zeros(p)  # Return zeros with correct dimension
+
+###############################################################################
+# 5) top_k_accuracy(est_importance, true_betas, k=1)
+###############################################################################
+def top_k_accuracy(est_importance, true_betas, k=1):
+    """Compute fraction overlap of top-k predicted vs. top-k true.
+    
+    Args:
+        est_importance (array): Estimated importance scores
+        true_betas (array): True beta coefficients
+        k (int): Number of top items to consider
+    
+    Returns:
+        float: Fraction of overlap between top-k sets
+    """
+    if est_importance is None or true_betas is None:
+        return 0.0
+    
+    # Convert to numpy arrays if not already
+    est_importance = np.asarray(est_importance)
+    true_betas = np.asarray(true_betas)
+    
+    # Get indices of top k items as numpy arrays
+    true_top_k = np.argsort(-np.abs(true_betas))[:k]
+    est_top_k = np.argsort(-np.abs(est_importance))[:k]
+    
+    # Compute overlap using numpy operations
+    overlap = np.sum(np.isin(true_top_k, est_top_k))
+    return float(overlap) / k
+
+###############################################################################
+# 6) generate_X(n, J, rho=0.0, random_state=None)
+###############################################################################
+def generate_X(n, J, rho=0.0, random_state=None):
+    """Generate predictor matrix X with correlation structure.
+    
+    Args:
+        n: Number of samples
+        J: Number of predictors
+        rho: Base correlation between predictors
+        random_state: Random state for reproducibility
+    """
+    if random_state is not None:
+        np.random.seed(random_state)
+    
+    # Generate correlation matrix with block structure
+    if rho > 0:
+        # Create blocks of correlated variables
+        block_size = max(2, J // 3)
+        num_blocks = J // block_size
+        remainder = J % block_size
+        
+        blocks = []
+        for i in range(num_blocks):
+            block_corr = np.full((block_size, block_size), rho)
+            np.fill_diagonal(block_corr, 1.0)
+            blocks.append(block_corr)
+        
+        if remainder > 0:
+            block_corr = np.full((remainder, remainder), rho)
+            np.fill_diagonal(block_corr, 1.0)
+            blocks.append(block_corr)
+        
+        corr = np.zeros((J, J))
+        start_idx = 0
+        for block in blocks:
+            size = block.shape[0]
+            corr[start_idx:start_idx+size, start_idx:start_idx+size] = block
+            start_idx += size
+        
+        # Add some random correlation between blocks
+        mask = corr == 0
+        corr[mask] = np.random.uniform(-0.5, 0.5, size=mask.sum())
+        np.fill_diagonal(corr, 1.0)
+        
+        # Ensure correlation matrix is positive definite
+        eigvals = np.linalg.eigvals(corr)
+        if np.min(eigvals) < 0:
+            corr += np.eye(J) * (abs(np.min(eigvals)) + 0.01)
+        
+        # Generate correlated data
+        L = np.linalg.cholesky(corr)
+        X = np.random.standard_normal((n, J)) @ L.T
+    else:
+        X = np.random.standard_normal((n, J))
+    
+    return X
+
+###############################################################################
+# 7) generate_y(X, magnitude='medium', noise_label='medium', random_state=None)
+###############################################################################
+def generate_y(X, magnitude='medium', noise_label='medium', random_state=None):
+    """Generate response variable y with non-linear effects and interactions.
+    
+    Args:
+        X: Predictor matrix
+        magnitude: Effect size ('low', 'medium', 'high')
+        noise_label: Noise level ('low', 'medium', 'high')
+        random_state: Random state for reproducibility
+    """
+    if random_state is not None:
+        np.random.seed(random_state)
+    
+    n, J = X.shape
+    
+    # Set magnitude of effects
+    magnitude_map = {
+        'low': 0.5,
+        'medium': 1.0,
+        'high': 2.0
+    }
+    beta_scale = magnitude_map[magnitude]
+    
+    # Set noise level
+    noise_map = {
+        'low': 0.1,
+        'medium': 0.5,
+        'high': 1.0
+    }
+    noise_scale = noise_map[noise_label]
+    
+    # Generate true effects based on available variables
+    y = np.zeros(n)
+    
+    # Always include first variable if available
+    if J >= 1:
+        y += beta_scale * X[:, 0]  # Linear effect
+    
+    # Add quadratic effect of second variable if available
+    if J >= 2:
+        y += beta_scale * 0.5 * X[:, 1]**2
+    
+    # Add interaction effect if we have at least 3 variables
+    if J >= 3:
+        y += beta_scale * 0.3 * X[:, 0] * X[:, 2]
+    
+    # Add noise
+    y += np.random.normal(0, noise_scale, n)
+    
+    # Standardize response
+    y = StandardScaler().fit_transform(y.reshape(-1, 1)).ravel()
+    
+    return y
+
+###############################################################################
+# 8) get_true_importance(J)
+###############################################################################
+def get_true_importance(J):
+    """Return indices of truly important variables.
+    Always returns [0] for J=1, [0,1] for J=2, and [0,1,2] for J>=3."""
+    return [0, 1, 2][:J]  # First three variables are important (will be truncated as needed)
+
+###############################################################################
+# 9) compute_top_k_accuracy(true_importance, est_importance, k=1)
+###############################################################################
+def compute_top_k_accuracy(true_importance, est_importance, k=1):
+    """Compute top-k accuracy between true and estimated importance rankings.
+    
+    Args:
+        true_importance: List of indices of truly important variables
+        est_importance: Array of importance scores
+        k: Number of top variables to consider
+        
+    Returns:
+        float: Proportion of overlap between top-k variables
+    """
+    # Ensure k is not larger than the number of variables
+    k = min(k, len(est_importance))
+    k = min(k, len(true_importance))
+    
+    # Get top k indices from estimated importance
+    top_k_indices = np.argsort(-est_importance)[:k]
+    
+    # Get top k indices from true importance (in case they're not already sorted)
+    true_top_k = true_importance[:k]
+    
+    # Compute overlap
+    overlap = len(set(true_top_k) & set(top_k_indices))
+    return overlap / k
