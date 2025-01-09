@@ -1,0 +1,19 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# History files
+.history/
+
+# IDE files
+.vscode/
+.idea/
+
+# Temporary files
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db 
