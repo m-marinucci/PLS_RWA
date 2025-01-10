@@ -1,0 +1,52 @@
+\section{Methods}
+
+\subsection{Simulation Design}
+We conducted a factorial simulation study to systematically evaluate the performance of PLS-VIP and RWA across diverse analytical conditions. The experimental design manipulated several key factors:
+
+\begin{itemize}
+\item \textbf{Number of Predictors ($J$)}: Three levels (2, 11, 20) representing low, medium, and high-dimensional scenarios.
+\item \textbf{Correlation Structure ($\rho$)}: Three fixed values representing increasing levels of multicollinearity:
+\begin{itemize}
+\item Low correlation ($\rho = 0.0$)
+\item Moderate correlation ($\rho = 0.5$)
+\item High correlation ($\rho = 0.95$)
+\end{itemize}
+\item \textbf{Data Types}:
+\begin{itemize}
+\item Continuous variables (sampled from a multivariate normal distribution)
+\item Ordinal variables (discretized into 5-point Likert scales)
+\item Binary variables (dichotomized using median splits)
+\end{itemize}
+\item \textbf{Sample Sizes ($n$)}: Three levels (100, 200, 500).
+\item \textbf{Effect Magnitudes}: Three levels representing weak ($\beta = 0.1$), moderate ($\beta = 0.3$), and strong ($\beta = 0.5$) predictor-outcome relationships.
+\item \textbf{Noise Levels}: Three signal-to-noise ratios ($\text{SNR} = 0.5, 1.0, 2.0$).
+\end{itemize}
+
+\subsection{Data Generation Process}
+For each combination of experimental factors, we generated synthetic datasets following these steps:
+\begin{enumerate}
+\item Generate a predictor correlation matrix with compound symmetry ($\rho$).
+\item Sample predictor variables from a multivariate normal distribution.
+\item For ordinal data, discretize predictors into 5-point Likert scales using quantile thresholds. For binary data, apply a median split.
+\item Generate the outcome variable ($y$) as a weighted sum of relevant predictors plus Gaussian noise. The proportion of relevant predictors ($K$) was scaled as $K = \lceil 0.3 \cdot J \rceil$.
+\item Replicate each condition 1000 times to ensure stable performance estimates.
+\end{enumerate}
+
+\subsection{Implementation}
+We implemented the simulation study using the following tools:
+\begin{itemize}
+\item \textbf{PLS-VIP}: Custom implementation of VIP scores in \texttt{scikit-learn} (version 1.0.2).
+\item \textbf{RWA}: Custom implementation in Python using principal components and variance decomposition.
+\item \textbf{Data Generation}: Conducted using NumPy (version 1.21.0) for matrix operations.
+\item \textbf{Statistical Analysis}: Performed using SciPy (version 1.7.0) for ANOVA and effect size calculations.
+\end{itemize}
+
+\subsection{Performance Metrics}
+We evaluated method performance using the following metrics:
+\begin{itemize}
+\item \textbf{Top-$k$ Accuracy}: Proportion of correctly identified top-$k$ important variables.
+\item \textbf{Mean Squared Error (MSE)}: Average squared difference between estimated and true importance scores.
+\item \textbf{Rank Correlation}: Agreement between true and estimated rankings (Spearman and Kendall).
+\end{itemize}
+
+Statistical significance was assessed using factorial ANOVA with interaction effects, and partial eta-squared ($\eta^2$) was computed to quantify effect sizes. All analyses were conducted at a significance level of $\alpha = 0.05$.

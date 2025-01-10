@@ -1,0 +1,109 @@
+\documentclass[12pt,a4paper]{article}
+
+% Essential packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[colorlinks=true,allcolors=blue]{hyperref}
+\usepackage{natbib}
+\usepackage{siunitx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{adjustbox}
+\usepackage[margin=2.5cm]{geometry}
+
+% Title information
+\title{Comparative Analysis of PLS-VIP and RWA Methods: \\
+A Comprehensive Simulation Study}
+\author{Massimiliano Marinucci\\
+\href{https://github.com/m-marinucci/PLS_RWA}{https://github.com/m-marinucci/PLS\_RWA}}
+\date{\today}
+
+% Document start
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This study presents a comprehensive comparison between Partial Least Squares-Variable Importance in Projection (PLS-VIP) and Relative Weight Analysis (RWA) methods through extensive simulation studies. We investigate their performance across various conditions including different sample sizes, predictor counts, correlation structures, and data types. Our findings reveal significant differences in method performance, particularly in high-dimensional scenarios and complex correlation structures, providing practical guidelines for method selection in applied research.
+\end{abstract}
+
+% Include sections
+\input{sections/introduction}
+\input{sections/methodology}
+\input{sections/results}
+\input{sections/discussion}
+\input{sections/conclusion}
+
+\appendix
+\section{Supplementary Tables}
+\label{sec:appendix}
+
+\subsection{Detailed ANOVA Results}
+\begin{table}[H]
+\centering
+\caption{Overall ANOVA Results}
+\label{tab:overall_anova}
+\input{tables/overall_anova}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{PLS-VIP Specific ANOVA Results}
+\label{tab:plsvip_anova}
+\input{tables/pls-vip_anova}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{RWA Specific ANOVA Results}
+\label{tab:rwa_anova}
+\input{tables/rwa_anova}
+\end{table}
+
+\subsection{Cross-tabulation Results}
+\begin{table}[H]
+\centering
+\caption{Performance by Number of Predictors}
+\label{tab:crosstab_j}
+\input{tables/crosstab_J}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Performance by Data Type}
+\label{tab:crosstab_datatype}
+\input{tables/crosstab_data_type}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Performance by Effect Magnitude}
+\label{tab:crosstab_magnitude}
+\input{tables/crosstab_magnitude}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Performance by Noise Level}
+\label{tab:crosstab_noise}
+\input{tables/crosstab_noise}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Performance by Correlation Level}
+\label{tab:crosstab_rho}
+\input{tables/crosstab_rho}
+\end{table}
+
+\clearpage
+\bibliographystyle{apalike}
+\bibliography{bibliography}
+
+\end{document} 
