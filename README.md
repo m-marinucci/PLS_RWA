@@ -1,69 +1,77 @@
-# Research Project: Statistical Analysis and Methodology Study
+# PLS-RWA Comparative Analysis
 
 ## Overview
 
-This repository contains research materials, including LaTeX papers, analysis scripts, and visualization outputs focusing on statistical analysis and methodology comparisons.
+This repository contains a comprehensive analysis framework comparing Partial Least Squares Variable Importance in Projection (PLS-VIP) and Relative Weight Analysis (RWA) methods. The codebase implements simulation studies to evaluate these methods across various conditions and data characteristics.
 
-## Repository Structure
+## Core Components
 
-```
-.
-├── paper/               # LaTeX source files for the research paper
-│   ├── main.tex        # Main LaTeX document
-│   ├── sections/       # Paper sections (introduction, methodology, results, etc.)
-│   ├── tables/         # LaTeX tables with analysis results
-│   └── bibliography.bib # Bibliography file
-├── docs/
-│   └── figures/        # Visualization outputs and plots
-└── *.py                # Python analysis scripts
-```
+### Analysis Scripts
 
-## Key Components
+- `main.py` - Primary simulation engine and analysis orchestrator
+- `factors.py` - Implementation of experimental factors and condition generation
+- `reproduce_analysis.py` - Script to reproduce all analysis results
+- `statistical_analysis.py` - Statistical analysis of simulation results
+- `visualize_results.py` - Generation of visualization outputs
+- `generate_summary.py` - Creation of summary statistics and tables
 
-### Research Paper
+### Data Processing
 
-The paper is organized into several sections:
+- `add_insights.py` - Basic insight generation from results
+- `add_comprehensive_insights.py` - Detailed analysis and pattern extraction
 
-- Introduction
-- Methodology
-- Results
-- Discussion
-- Conclusion
+### Reproduction
 
-### Data Analysis
-
-Python scripts for data analysis and insight generation:
-
-- `add_insights.py`
-- `add_comprehensive_insights.py`
-
-### Visualizations
-
-Key visualizations in `docs/figures/`:
-
-- Overall Performance Analysis
-- Method Comparisons
-- Interaction Plots
-- Detailed Experiment Reports
-
-### Results Tables
-
-Comprehensive analysis results in LaTeX tables covering:
-
-- Cross-tabulation analyses (ρ, noise, magnitude, data type)
-- Correlation summaries
-- Basic statistical summaries
+- `reproduce_results.sh` - Shell script to reproduce the entire analysis pipeline
+- Key output files:
+  - `simulation_results.csv` - Raw simulation results
+  - `statistical_analysis_results.txt` - Statistical analysis outputs
+  - Various visualization outputs in `docs/figures/`
 
 ## Getting Started
 
 1. Clone this repository
-2. Ensure you have LaTeX installed for paper compilation
-3. Install Python dependencies (if running analysis scripts)
+
+```bash
+git clone https://github.com/m-marinucci/PLS_RWA.git
+```
+
+2. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+3. Run the analysis
+
+```bash
+./reproduce_results.sh
+```
+
+## Project Structure
+
+```
+.
+├── *.py                # Core Python analysis scripts
+├── docs/
+│   ├── figures/       # Generated visualizations
+│   └── tables/        # Analysis result tables
+└── paper/             # Research paper materials (supplementary)
+```
+
+## Results
+
+The analysis results are organized in:
+
+- Raw data: `simulation_results.csv`
+- Statistical summaries: `docs/tables/`
+- Visualizations: `docs/figures/`
+- Detailed findings: `docs/analysis_summary.md`
 
 ## License
 
-Propietary
+Proprietary
 
 ## Contact
 
-Massimiliano Marinucci (mmarinucci@numinate.com)
+Massimiliano Marinucci (<mmarinucci@numinate.com>)
