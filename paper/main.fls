@@ -230,11 +230,11 @@ INPUT ./tables/correlation_summary.tex
 INPUT ./tables/correlation_summary.tex
 INPUT tables/correlation_summary.tex
 INPUT /usr/local/texlive/2024basic/texmf-dist/fonts/tfm/jknappen/ec/ectt1095.tfm
-INPUT ./figures/finding3_datatype.png
-INPUT ./figures/finding3_datatype.png
-INPUT ./figures/finding3_datatype.png
-INPUT ./figures/finding3_datatype.png
-INPUT ./figures/finding3_datatype.png
+INPUT ./figures/performance_comparison.png
+INPUT ./figures/performance_comparison.png
+INPUT ./figures/performance_comparison.png
+INPUT ./figures/performance_comparison.png
+INPUT ./figures/performance_comparison.png
 INPUT ./figures/finding5_interactions.png
 INPUT ./figures/finding5_interactions.png
 INPUT ./figures/finding5_interactions.png
