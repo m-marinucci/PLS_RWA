@@ -1,5 +1,31 @@
 \section{Introduction}
 
+\subsection{Overview}
+
+\subsubsection{Partial Least Squares (PLS)}
+
+Partial Least Squares (PLS) is a statistical method designed primarily for situations in which you have many correlated predictors (potentially more predictors than observations), as well as possibly multi-collinearity among predictors. In broad strokes:
+\begin{itemize}
+    \item \textbf{Primary Goal:} Build a predictive (regression) model while reducing the dimensionality of the problem.
+    \item \textbf{Key Mechanism:} Finds latent components (dimensions) that explain covariance between predictors $X$ and outcome(s) $Y$.
+    \item \textbf{Resulting Model:} Yields factor scores (PLS components) that are linear combinations of the original predictors, which are then used to predict the outcome(s).
+\end{itemize}
+
+Because of its approach to dimensionality reduction, PLS can handle high-dimensional data effectively and typically avoids overfitting better than multiple linear regression when there are many correlated predictors.
+
+\subsubsection{Relative Weight Analysis (RWA)}
+
+Relative Weight Analysis (RWA)---sometimes called ``Dominance Analysis'' or ``Shapley Value Regression'' in some contexts---addresses a different question: how to decompose the variance explained in a criterion (outcome) among multiple correlated predictors. Essentially, RWA is about quantifying predictor importance:
+\begin{itemize}
+    \item \textbf{Primary Goal:} Partition the $R^2$ (or another measure of fit) among a set of correlated predictors to determine each predictor's relative contribution.
+    \item \textbf{Key Mechanism:} Uses transformations of the predictor set (via principal components or other approaches) and then calculates how each predictor contributes to the explained variance in the outcome.
+    \item \textbf{Resulting Metric:} Gives a set of relative weights (often expressed in percentage terms) that reflect how much each predictor uniquely contributes to predicting $Y$, above and beyond correlation among other predictors.
+\end{itemize}
+
+RWA doesn't produce a dimensionality-reduced model for direct prediction. Instead, it is typically an interpretation tool for standard regression or structural models, clarifying which predictors matter most when many of them are correlated.
+
+\subsection{Research Context}
+
 Variable selection and importance assessment in multivariate analysis present significant challenges in modern data analysis. Two prominent methods that address these challenges are Partial Least Squares-Variable Importance in Projection (PLS-VIP) \citep{wold2001pls} and Relative Weight Analysis (RWA). While both methods aim to quantify variable importance in complex datasets, their performance characteristics under different conditions remain incompletely understood \citep{chong2005performance, tonidandel2011relative}. The complete implementation and analysis code for this study is available in a public repository \citep{marinucci2024pls}.
 
 Marketing research field requires reliable variable importance methods. Recent challenges include the comparison across two methods PLS and RWA. In marketing research, where datasets often contain a large number of customer attributes or survey responses, reliable variable importance assessments are critical for understanding consumer behavior and optimizing decision-making. This study is particularly relevant for datasets containing ordinal predictors, such as Likert-scale survey responses, where standard regression-based approaches like RWA may struggle.

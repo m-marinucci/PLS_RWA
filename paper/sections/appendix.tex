@@ -1,0 +1,44 @@
+\appendix
+\section{Mathematical Core}
+
+\subsection{Partial Least Squares Regression}
+
+Suppose we have:
+\begin{itemize}
+    \item $X$ is an $n \times p$ matrix of predictors (possibly high-dimensional, with correlated columns).
+    \item $Y$ is an $n \times 1$ (for single-response) or $n \times m$ (for multi-response) outcome matrix.
+\end{itemize}
+
+PLS seeks to find a set of latent components $\{t_1, t_2, \ldots, t_k\}$ such that:
+\begin{enumerate}
+    \item Each $t_j$ is a linear combination of the columns of $X$. In matrix terms, $T = XW$, where $W$ are the weights derived from the iterative algorithm.
+    \item These latent components explain as much of the covariance $\mathrm{Cov}(X, Y)$ (or correlation) as possible.
+    \item The outcome $Y$ can be regressed on these latent components $T$.
+\end{enumerate}
+
+A simple (though not complete) perspective:
+\begin{enumerate}
+    \item Compute directions $w_1, w_2, \ldots$ successively maximizing $\mathrm{Cov}(t_j, Y)$.
+    \item Orthogonalize these directions (depending on PLS mode or algorithm).
+    \item Regress $Y$ on $\{t_j\}$.
+\end{enumerate}
+
+You end up with fewer components ($k\ll p$) if $k$ is chosen by cross-validation or some other model selection criterion.
+
+\subsection{Relative Weight Analysis}
+
+Consider a multiple linear regression with outcome $Y$ and predictors $X_1, X_2, \ldots, X_p$. The standard model:
+
+\begin{equation}
+Y = \beta_0 + \beta_1 X_1 + \beta_2 X_2 + \ldots + \beta_p X_p + \varepsilon.
+\end{equation}
+
+Even if we obtain the $\beta$ estimates, collinearity among the $X_i$ can complicate interpretation. RWA tries to decompose $R^2$ among predictors. A common implementation of RWA (Johnson's RWA) involves:
+\begin{enumerate}
+    \item Create uncorrelated principal components from the original set of predictors $X_1, \dots, X_p$.
+    \item Re-express each principal component back into the original predictors (i.e., find how each predictor contributes to each principal component).
+    \item Weight each component's contribution to $R^2$ by how strongly that component correlates with $Y$.
+    \item Sum the contributions for each predictor across all components to get a final ``relative weight.''
+\end{enumerate}
+
+Conceptually, RWA tries to circumvent the pitfalls of correlation among predictors by using the principal components to filter out shared variance. Then, by reconstituting the components into the original predictor space, it calculates how much each predictor ``uniquely'' explains in the model. 
