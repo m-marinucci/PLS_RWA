@@ -1,77 +1,74 @@
-# PLS-RWA Comparative Analysis
+# PLS-VIP vs RWA Comparison Study
+
+A statistical simulation project comparing **PLS-VIP** (Partial Least Squares - Variable Importance in Projection) and **RWA** (Relative Weight Analysis) methods for identifying important predictors in regression models.
 
 ## Overview
 
-This repository contains a comprehensive analysis framework comparing Partial Least Squares Variable Importance in Projection (PLS-VIP) and Relative Weight Analysis (RWA) methods. The codebase implements simulation studies to evaluate these methods across various conditions and data characteristics.
+This simulation study evaluates two competing methods for variable importance assessment:
 
-## Core Components
+- **PLS-VIP**: Uses cross-decomposition to score variable importance
+- **RWA**: Johnson's Relative Weight Analysis using transformation matrices
 
-### Analysis Scripts
+The simulation tests performance across multiple parameter combinations using Monte Carlo experiments to determine which method performs better under different conditions.
 
-- `main.py` - Primary simulation engine and analysis orchestrator
-- `factors.py` - Implementation of experimental factors and condition generation
-- `reproduce_analysis.py` - Script to reproduce all analysis results
-- `statistical_analysis.py` - Statistical analysis of simulation results
-- `visualize_results.py` - Generation of visualization outputs
-- `generate_summary.py` - Creation of summary statistics and tables
+## Quick Start
 
-### Data Processing
-
-- `add_insights.py` - Basic insight generation from results
-- `add_comprehensive_insights.py` - Detailed analysis and pattern extraction
-
-### Reproduction
-
-- `reproduce_results.sh` - Shell script to reproduce the entire analysis pipeline
-- Key output files:
-  - `simulation_results.csv` - Raw simulation results
-  - `statistical_analysis_results.txt` - Statistical analysis outputs
-  - Various visualization outputs in `docs/figures/`
-
-## Getting Started
-
-1. Clone this repository
-
-```bash
-git clone https://github.com/m-marinucci/PLS_RWA.git
-```
-
-2. Install dependencies
+### Installation
 
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Run the analysis
+### Running the Simulation
 
 ```bash
-./reproduce_results.sh
+python main.py
 ```
 
-## Project Structure
+This will:
+- Run 100 replications across multiple parameter combinations
+- Save results to `simulation_results.csv`
+- Display performance analysis
 
-```
-.
-├── *.py                # Core Python analysis scripts
-├── docs/
-│   ├── figures/       # Generated visualizations
-│   └── tables/        # Analysis result tables
-└── paper/             # Research paper materials (supplementary)
-```
+## Parameter Space
 
-## Results
+The simulation tests across:
+- **Sample sizes**: 100-500
+- **Number of predictors**: 10-50
+- **Correlation levels**: 0.1-0.5
+- **Effect magnitudes**: 0.1-0.5
+- **Noise ratios**: 0.1-0.5
+- **Importance proportion α**: 0.3 (default)
 
-The analysis results are organized in:
+## Architecture
 
-- Raw data: `simulation_results.csv`
-- Statistical summaries: `docs/tables/`
-- Visualizations: `docs/figures/`
-- Detailed findings: `docs/analysis_summary.md`
+- **`factors.py`**: Statistical core implementing both methods and data generation
+- **`main.py`**: Simulation engine orchestrating Monte Carlo experiments
+- **`visualization.py`**: Performance visualization utilities
+- **`logger.py`**: Logging configuration
+
+## Output Files
+
+- **`simulation_results.csv`**: Raw simulation data
+- **`detailed_results.csv`**: Aggregated performance metrics
+- **`fractional_factorial_results.csv`**: Fractional factorial design results
+- **`comparison_plot.png`** & **`performance_comparison.png`**: Visual comparisons
+
+## Configuration
+
+Key parameters in `main.py`:
+- `alpha`: Proportion of variables that are important (default 0.3)
+- `randomize_important`: Whether to randomize important variables across replications
+- Results are saved incrementally to prevent data loss
+
+## Methods
+
+### PLS-VIP
+Uses partial least squares regression to decompose the predictor space and calculates Variable Importance in Projection scores based on the contribution of each variable to the latent components.
+
+### RWA (Relative Weight Analysis)
+Johnson's method that uses transformation matrices to partition the variance in the outcome variable among correlated predictors, providing relative importance weights.
 
 ## License
 
-Proprietary
-
-## Contact
-
-Massimiliano Marinucci (<mmarinucci@numinate.com>)
+This project is for research and educational purposes.
