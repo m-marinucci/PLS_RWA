@@ -1,0 +1,146 @@
+name: Statistical Simulation Code Quality Check
+
+on:
+  pull_request:
+    paths:
+      - '**/*.py'
+      - 'requirements.txt'
+  push:
+    branches: [ main, inc_importance ]
+
+jobs:
+  code-quality-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python for Statistical Computing
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install statistical simulation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install matplotlib>=3.7.0 tqdm
+          # Install code analysis tools
+          pip install networkx ast-grep
+
+      - name: Validate statistical simulation imports
+        run: |
+          echo "🔬 Validating statistical simulation module imports..."
+          python -c "
+          # Test core statistical imports
+          try:
+              from main import main_fractional_simulation, analyze_performance
+              from factors import generate_X, generate_y, do_pls_vip, compute_rwa
+              from visualization import plot_comparison
+              from logger import setup_logger
+              print('✅ All core simulation modules import successfully')
+          except ImportError as e:
+              print(f'❌ Import error in core modules: {e}')
+              exit(1)
+
+          # Test scientific computing imports
+          try:
+              import numpy as np
+              import pandas as pd
+              from sklearn.cross_decomposition import PLSRegression
+              import statsmodels.api as sm
+              print('✅ All scientific computing dependencies available')
+          except ImportError as e:
+              print(f'❌ Scientific computing import error: {e}')
+              exit(1)
+          "
+
+      - name: Check for circular dependencies in simulation code
+        run: |
+          echo "🔄 Checking for circular dependencies in statistical simulation modules..."
+          python -c "
+          import ast
+          import os
+          from collections import defaultdict, deque
+
+          def get_imports(file_path):
+              '''Extract imports from a Python file'''
+              try:
+                  with open(file_path, 'r') as f:
+                      tree = ast.parse(f.read())
+
+                  imports = []
+                  for node in ast.walk(tree):
+                      if isinstance(node, ast.Import):
+                          for alias in node.names:
+                              imports.append(alias.name)
+                      elif isinstance(node, ast.ImportFrom):
+                          if node.module:
+                              imports.append(node.module)
+                  return imports
+              except:
+                  return []
+
+          # Build dependency graph for our simulation modules
+          simulation_files = ['main.py', 'factors.py', 'visualization.py', 'logger.py']
+          graph = defaultdict(list)
+
+          for file in simulation_files:
+              if os.path.exists(file):
+                  imports = get_imports(file)
+                  module_name = file.replace('.py', '')
+                  for imp in imports:
+                      # Only track internal dependencies
+                      if imp.replace('.py', '') in [f.replace('.py', '') for f in simulation_files]:
+                          graph[module_name].append(imp.replace('.py', ''))
+
+          # Simple cycle detection
+          def has_cycle(graph):
+              visited = set()
+              rec_stack = set()
+
+              def dfs(node):
+                  visited.add(node)
+                  rec_stack.add(node)
+
+                  for neighbor in graph.get(node, []):
+                      if neighbor not in visited:
+                          if dfs(neighbor):
+                              return True
+                      elif neighbor in rec_stack:
+                          return True
+
+                  rec_stack.remove(node)
+                  return False
+
+              for node in graph:
+                  if node not in visited:
+                      if dfs(node):
+                          return True
+              return False
+
+          if has_cycle(graph):
+              print('❌ Circular dependency detected in simulation modules!')
+              exit(1)
+          else:
+              print('✅ No circular dependencies found in simulation modules')
+          "
+
+      - name: Test simulation functionality
+        run: |
+          echo "🧪 Testing statistical simulation functionality..."
+          python -c "
+          from main import main_fractional_simulation
+          import numpy as np
+
+          print('Running quick simulation test...')
+          results = main_fractional_simulation(n_reps=3)
+
+          if len(results) > 0:
+              print(f'✅ Simulation test passed: {len(results)} results generated')
+              print(f'Methods tested: {results[\"method\"].unique()}')
+              print(f'Valid runs: {results[\"valid_run\"].sum()}/{len(results)}')
+          else:
+              print('❌ Simulation test failed: no results generated')
+              exit(1)
+          "

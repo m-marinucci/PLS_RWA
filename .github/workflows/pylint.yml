@@ -1,0 +1,108 @@
+name: Statistical Simulation Code Quality (Pylint)
+
+on:
+  pull_request:
+    paths:
+      - '**/*.py'
+      - 'requirements.txt'
+  push:
+    branches: [ main, inc_importance ]
+
+jobs:
+  statistical-code-quality:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10"]
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need full history for git diff
+
+    - name: Set up Python for Statistical Computing ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install statistical simulation dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install matplotlib>=3.7.0 tqdm
+        pip install pylint
+        
+    - name: Get changed statistical simulation files
+      id: changed-files
+      run: |
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          # For PRs, compare against base branch
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }}..${{ github.sha }} | grep '\.py$' | tr '\n' ' ')
+        else
+          # For pushes to main, check last commit
+          CHANGED_FILES=$(git diff --name-only HEAD~1 | grep '\.py$' | tr '\n' ' ')
+        fi
+
+        echo "changed_files=$CHANGED_FILES" >> $GITHUB_OUTPUT
+        echo "Changed statistical simulation files: $CHANGED_FILES"
+
+        # Identify core simulation files for special attention
+        CORE_FILES=""
+        for file in $CHANGED_FILES; do
+          if [[ "$file" == "main.py" || "$file" == "factors.py" || "$file" == "visualization.py" || "$file" == "logger.py" ]]; then
+            CORE_FILES="$CORE_FILES $file"
+          fi
+        done
+        echo "core_files=$CORE_FILES" >> $GITHUB_OUTPUT
+        echo "Core simulation files changed: $CORE_FILES"
+        
+    - name: Run pylint on changed statistical simulation files
+      if: steps.changed-files.outputs.changed_files != ''
+      run: |
+        echo "🔬 Running pylint on statistical simulation files: ${{ steps.changed-files.outputs.changed_files }}"
+
+        # Create pylint configuration for statistical computing
+        cat > .pylintrc << EOF
+        [MASTER]
+        extension-pkg-whitelist=numpy,pandas,sklearn,statsmodels
+
+        [MESSAGES CONTROL]
+        disable=too-many-locals,too-many-arguments,invalid-name,line-too-long
+
+        [DESIGN]
+        max-args=10
+        max-locals=20
+        max-branches=15
+
+        [FORMAT]
+        max-line-length=100
+        EOF
+
+        # Run pylint with statistical computing considerations
+        pylint ${{ steps.changed-files.outputs.changed_files }} --fail-under=7.0 --rcfile=.pylintrc
+
+    - name: Run enhanced checks on core simulation files
+      if: steps.changed-files.outputs.core_files != ''
+      run: |
+        echo "🎯 Enhanced quality checks on core simulation files: ${{ steps.changed-files.outputs.core_files }}"
+
+        # Additional checks for core simulation files
+        for file in ${{ steps.changed-files.outputs.core_files }}; do
+          echo "Checking $file for statistical computing best practices..."
+
+          # Check for proper numpy random state usage
+          if grep -q "np.random" "$file" && ! grep -q "random_state\|rng" "$file"; then
+            echo "⚠️  Warning: $file uses np.random without explicit random state for reproducibility"
+          fi
+
+          # Check for proper error handling in statistical computations
+          if grep -q "sklearn\|statsmodels" "$file" && ! grep -q "try:\|except" "$file"; then
+            echo "⚠️  Warning: $file uses statistical libraries without error handling"
+          fi
+
+          echo "✅ $file passed enhanced checks"
+        done
+
+    - name: No statistical simulation files changed
+      if: steps.changed-files.outputs.changed_files == ''
+      run: |
+        echo "📊 No statistical simulation Python files changed in this PR/commit"
