@@ -1,0 +1,226 @@
+name: Research Paper Compilation and Validation
+
+on:
+  pull_request:
+    paths:
+      - 'paper/**'
+      - 'main.py'
+      - 'factors.py'
+      - 'visualization.py'
+  push:
+    branches: [ main, inc_importance ]
+    paths:
+      - 'paper/**'
+  workflow_dispatch:
+    inputs:
+      compile_type:
+        description: 'Type of compilation to perform'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - paper-only
+          - simulation-only
+
+jobs:
+  research-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python for Statistical Computing
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install statistical simulation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install matplotlib>=3.7.0 tqdm pytest
+
+      - name: Set up LaTeX
+        uses: xu-cheng/latex-action@v2
+        with:
+          root_file: paper/main.tex
+          working_directory: paper
+          args: -pdf -file-line-error -halt-on-error -interaction=nonstopmode
+        if: ${{ github.event.inputs.compile_type == 'full' || github.event.inputs.compile_type == 'paper-only' || github.event.inputs.compile_type == '' }}
+
+      - name: Validate simulation reproducibility
+        if: ${{ github.event.inputs.compile_type == 'full' || github.event.inputs.compile_type == 'simulation-only' || github.event.inputs.compile_type == '' }}
+        run: |
+          echo "🔬 Validating PLS-VIP vs RWA simulation reproducibility..."
+          
+          # Test core functionality
+          python -c "
+          from main import main_fractional_simulation, analyze_performance
+          from factors import generate_X, generate_y, do_pls_vip, compute_rwa
+          import numpy as np
+          
+          print('Testing reproducibility with fixed random seed...')
+          
+          # Test 1: Data generation reproducibility
+          rng1 = np.random.default_rng(42)
+          rng2 = np.random.default_rng(42)
+          
+          X1 = generate_X(n=50, J=5, rho=0.3, random_state=rng1)
+          X2 = generate_X(n=50, J=5, rho=0.3, random_state=rng2)
+          
+          if np.allclose(X1, X2):
+              print('✅ Data generation is reproducible')
+          else:
+              print('❌ Data generation is not reproducible')
+              exit(1)
+          
+          # Test 2: Method consistency
+          from factors import get_true_importance
+          rng = np.random.default_rng(123)
+          important_vars = get_true_importance(5, alpha=0.4, rng=rng)
+          y = generate_y(X1, important_vars, magnitude='medium', noise_label='low', rng=rng)
+          
+          pls_scores = do_pls_vip(X1, y)
+          rwa_scores = compute_rwa(X1, y)
+          
+          if len(pls_scores) == len(rwa_scores) == X1.shape[1]:
+              print('✅ Both methods return correct number of importance scores')
+          else:
+              print('❌ Methods return inconsistent number of scores')
+              exit(1)
+          
+          print('✅ All reproducibility tests passed')
+          "
+
+      - name: Run mini simulation for paper validation
+        if: ${{ github.event.inputs.compile_type == 'full' || github.event.inputs.compile_type == 'simulation-only' || github.event.inputs.compile_type == '' }}
+        run: |
+          echo "📊 Running mini simulation to validate paper claims..."
+          python -c "
+          from main import main_fractional_simulation
+          import pandas as pd
+          
+          print('Running simulation with 10 replications...')
+          results = main_fractional_simulation(n_reps=10)
+          
+          if len(results) == 0:
+              print('❌ Simulation failed to generate results')
+              exit(1)
+          
+          # Validate expected structure
+          expected_columns = ['method', 'n', 'J', 'magnitude', 'noise', 'rho', 'valid_run']
+          missing_cols = [col for col in expected_columns if col not in results.columns]
+          
+          if missing_cols:
+              print(f'❌ Missing expected columns: {missing_cols}')
+              exit(1)
+          
+          # Check both methods are present
+          methods = results['method'].unique()
+          if 'PLS-VIP' not in methods or 'RWA' not in methods:
+              print(f'❌ Missing methods. Found: {methods}')
+              exit(1)
+          
+          # Check for valid runs
+          valid_runs = results['valid_run'].sum()
+          total_runs = len(results)
+          
+          print(f'✅ Mini simulation completed: {valid_runs}/{total_runs} valid runs')
+          print(f'Methods tested: {list(methods)}')
+          print(f'Parameter combinations: {len(results.groupby([\"n\", \"J\", \"magnitude\", \"noise\", \"rho\"]))}')
+          "
+
+      - name: Check paper compilation artifacts
+        if: ${{ github.event.inputs.compile_type == 'full' || github.event.inputs.compile_type == 'paper-only' || github.event.inputs.compile_type == '' }}
+        run: |
+          echo "📄 Checking paper compilation artifacts..."
+          if [ -f "paper/main.pdf" ]; then
+            echo "✅ Paper PDF generated successfully"
+            ls -la paper/main.pdf
+          else
+            echo "❌ Paper PDF not found"
+            exit 1
+          fi
+
+      - name: Upload paper artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: research-paper-artifacts
+          path: |
+            paper/main.pdf
+            paper/*.log
+            paper/*.aux
+          retention-days: 30
+
+      - name: Upload simulation validation results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: simulation-validation-results
+          path: |
+            *.csv
+            *.png
+            simulation_test_*.log
+          retention-days: 7
+
+  paper-quality-check:
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.changed_files, 'paper/') || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check LaTeX syntax and structure
+        run: |
+          echo "📝 Checking LaTeX paper structure and syntax..."
+          
+          # Check for required sections
+          if ! grep -q "\\\\section{Introduction}" paper/main.tex; then
+            echo "⚠️  Warning: No Introduction section found"
+          fi
+          
+          if ! grep -q "\\\\section{Methods}" paper/main.tex; then
+            echo "⚠️  Warning: No Methods section found"
+          fi
+          
+          if ! grep -q "\\\\section{Results}" paper/main.tex; then
+            echo "⚠️  Warning: No Results section found"
+          fi
+          
+          if ! grep -q "\\\\section{Discussion}" paper/main.tex; then
+            echo "⚠️  Warning: No Discussion section found"
+          fi
+          
+          # Check for citations
+          if ! grep -q "\\\\cite{" paper/main.tex; then
+            echo "⚠️  Warning: No citations found in paper"
+          fi
+          
+          # Check for figures
+          if ! grep -q "\\\\includegraphics" paper/main.tex; then
+            echo "⚠️  Warning: No figures found in paper"
+          fi
+          
+          echo "✅ Paper structure check completed"
+
+      - name: Validate research reproducibility claims
+        run: |
+          echo "🔬 Validating reproducibility claims in paper..."
+          
+          # Check if paper mentions reproducibility
+          if grep -q -i "reproducib" paper/main.tex; then
+            echo "✅ Paper mentions reproducibility"
+            
+            # Check if code availability is mentioned
+            if grep -q -i "github\|code\|repository" paper/main.tex; then
+              echo "✅ Paper mentions code availability"
+            else
+              echo "⚠️  Warning: Paper mentions reproducibility but not code availability"
+            fi
+          else
+            echo "⚠️  Warning: Paper does not mention reproducibility"
+          fi
+          
+          echo "✅ Reproducibility claims validation completed"

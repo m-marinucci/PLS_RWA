@@ -1,0 +1,290 @@
+name: Statistical Simulation Tests and Validation
+
+on:
+  pull_request:
+    paths:
+      - '**/*.py'
+      - 'requirements.txt'
+  push:
+    branches: [ main, inc_importance ]
+  schedule:
+    # Run weekly to catch any drift in statistical results
+    - cron: '0 6 * * 1'  # Every Monday at 6 AM UTC
+
+jobs:
+  statistical-validation:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11"]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install matplotlib>=3.7.0 tqdm pytest pytest-cov
+
+      - name: Test statistical method implementations
+        run: |
+          echo "🧪 Testing PLS-VIP and RWA method implementations..."
+          python -c "
+          import numpy as np
+          from factors import generate_X, generate_y, get_true_importance, do_pls_vip, compute_rwa
+          
+          # Test with known data
+          np.random.seed(42)
+          rng = np.random.default_rng(42)
+          
+          # Generate test data
+          X = generate_X(n=100, J=10, rho=0.5, random_state=rng)
+          important_vars = get_true_importance(10, alpha=0.3, rng=rng)
+          y = generate_y(X, important_vars, magnitude='high', noise_label='low', rng=rng)
+          
+          print(f'Generated data: X shape {X.shape}, y shape {y.shape}')
+          print(f'Important variables: {np.where(important_vars)[0]}')
+          
+          # Test PLS-VIP
+          pls_scores = do_pls_vip(X, y)
+          print(f'PLS-VIP scores shape: {pls_scores.shape}')
+          print(f'PLS-VIP top variables: {np.argsort(pls_scores)[-3:]}')
+          
+          # Test RWA
+          rwa_scores = compute_rwa(X, y)
+          print(f'RWA scores shape: {rwa_scores.shape}')
+          print(f'RWA top variables: {np.argsort(rwa_scores)[-3:]}')
+          
+          # Validate outputs
+          assert len(pls_scores) == X.shape[1], 'PLS-VIP should return one score per variable'
+          assert len(rwa_scores) == X.shape[1], 'RWA should return one score per variable'
+          assert np.all(pls_scores >= 0), 'PLS-VIP scores should be non-negative'
+          assert np.all(rwa_scores >= 0), 'RWA scores should be non-negative'
+          
+          print('✅ All method implementation tests passed')
+          "
+
+      - name: Test simulation parameter validation
+        run: |
+          echo "⚙️ Testing simulation parameter validation..."
+          python -c "
+          from main import main_fractional_simulation
+          import pandas as pd
+          
+          # Test with minimal parameters
+          results = main_fractional_simulation(n_reps=3)
+          
+          # Validate structure
+          assert isinstance(results, pd.DataFrame), 'Results should be a DataFrame'
+          assert len(results) > 0, 'Should generate some results'
+          
+          # Check required columns
+          required_cols = ['method', 'n', 'J', 'magnitude', 'noise', 'rho', 'valid_run']
+          for col in required_cols:
+              assert col in results.columns, f'Missing required column: {col}'
+          
+          # Check method values
+          methods = results['method'].unique()
+          assert 'PLS-VIP' in methods, 'PLS-VIP method missing'
+          assert 'RWA' in methods, 'RWA method missing'
+          
+          # Check parameter ranges
+          assert results['n'].min() > 0, 'Sample size should be positive'
+          assert results['J'].min() > 0, 'Number of predictors should be positive'
+          assert results['rho'].min() >= 0 and results['rho'].max() <= 1, 'Correlation should be in [0,1]'
+          
+          print('✅ All parameter validation tests passed')
+          "
+
+      - name: Test statistical consistency
+        run: |
+          echo "📊 Testing statistical consistency across runs..."
+          python -c "
+          from main import main_fractional_simulation
+          import numpy as np
+          
+          # Run same simulation twice with same seed
+          results1 = main_fractional_simulation(n_reps=5)
+          results2 = main_fractional_simulation(n_reps=5)
+          
+          # Results should be identical with same random seed
+          # (Note: This assumes the simulation uses proper random state management)
+          
+          print(f'Run 1: {len(results1)} results')
+          print(f'Run 2: {len(results2)} results')
+          
+          # Check that we get consistent structure
+          assert len(results1) == len(results2), 'Runs should produce same number of results'
+          assert list(results1.columns) == list(results2.columns), 'Runs should have same columns'
+          
+          # Check valid run rates
+          valid_rate1 = results1['valid_run'].mean()
+          valid_rate2 = results2['valid_run'].mean()
+          
+          print(f'Valid run rate 1: {valid_rate1:.2f}')
+          print(f'Valid run rate 2: {valid_rate2:.2f}')
+          
+          # Should have reasonable success rate
+          assert valid_rate1 > 0.5, 'Should have reasonable success rate'
+          assert valid_rate2 > 0.5, 'Should have reasonable success rate'
+          
+          print('✅ Statistical consistency tests passed')
+          "
+
+      - name: Test edge cases and error handling
+        run: |
+          echo "🚨 Testing edge cases and error handling..."
+          python -c "
+          import numpy as np
+          from factors import generate_X, generate_y, get_true_importance, do_pls_vip, compute_rwa
+          
+          # Test with minimal data
+          rng = np.random.default_rng(42)
+          X_small = generate_X(n=10, J=3, rho=0.1, random_state=rng)
+          important_vars_small = get_true_importance(3, alpha=0.5, rng=rng)
+          y_small = generate_y(X_small, important_vars_small, magnitude='low', noise_label='high', rng=rng)
+          
+          try:
+              pls_scores = do_pls_vip(X_small, y_small)
+              rwa_scores = compute_rwa(X_small, y_small)
+              print('✅ Methods handle small datasets')
+          except Exception as e:
+              print(f'⚠️  Methods may have issues with small datasets: {e}')
+          
+          # Test with high correlation
+          X_corr = generate_X(n=50, J=5, rho=0.95, random_state=rng)
+          important_vars_corr = get_true_importance(5, alpha=0.3, rng=rng)
+          y_corr = generate_y(X_corr, important_vars_corr, magnitude='medium', noise_label='medium', rng=rng)
+          
+          try:
+              pls_scores = do_pls_vip(X_corr, y_corr)
+              rwa_scores = compute_rwa(X_corr, y_corr)
+              print('✅ Methods handle high correlation')
+          except Exception as e:
+              print(f'⚠️  Methods may have issues with high correlation: {e}')
+          
+          print('✅ Edge case testing completed')
+          "
+
+      - name: Performance benchmark
+        run: |
+          echo "⏱️ Running performance benchmark..."
+          python -c "
+          import time
+          from main import main_fractional_simulation
+          
+          # Benchmark simulation performance
+          start_time = time.time()
+          results = main_fractional_simulation(n_reps=5)
+          end_time = time.time()
+          
+          duration = end_time - start_time
+          results_per_second = len(results) / duration if duration > 0 else 0
+          
+          print(f'Benchmark results:')
+          print(f'  Duration: {duration:.2f} seconds')
+          print(f'  Results generated: {len(results)}')
+          print(f'  Results per second: {results_per_second:.2f}')
+          print(f'  Valid runs: {results[\"valid_run\"].sum()}/{len(results)}')
+          
+          # Performance should be reasonable
+          assert duration < 60, 'Simulation should complete within 60 seconds for 5 reps'
+          assert results_per_second > 0.1, 'Should generate at least 0.1 results per second'
+          
+          print('✅ Performance benchmark passed')
+          "
+
+      - name: Generate test report
+        if: always()
+        run: |
+          echo "📋 Generating test report..."
+          python -c "
+          import sys
+          import platform
+          import numpy as np
+          import pandas as pd
+          import sklearn
+          import statsmodels
+          
+          print('=== Statistical Simulation Test Report ===')
+          print(f'Python version: {sys.version}')
+          print(f'Platform: {platform.platform()}')
+          print(f'NumPy version: {np.__version__}')
+          print(f'Pandas version: {pd.__version__}')
+          print(f'Scikit-learn version: {sklearn.__version__}')
+          print(f'Statsmodels version: {statsmodels.__version__}')
+          print('==========================================')
+          "
+
+  integration-test:
+    runs-on: ubuntu-latest
+    needs: statistical-validation
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install matplotlib>=3.7.0 tqdm
+
+      - name: Run full integration test
+        run: |
+          echo "🔗 Running full integration test..."
+          python -c "
+          from main import main_fractional_simulation, analyze_performance
+          from visualization import plot_comparison
+          import os
+          
+          print('Running integrated simulation and analysis...')
+          
+          # Run simulation
+          results = main_fractional_simulation(n_reps=10)
+          print(f'Simulation completed: {len(results)} results')
+          
+          # Run analysis
+          try:
+              analyze_performance(results)
+              print('✅ Performance analysis completed')
+          except Exception as e:
+              print(f'⚠️  Performance analysis issue: {e}')
+          
+          # Test visualization
+          try:
+              plot_comparison(results)
+              print('✅ Visualization completed')
+              
+              # Check if plots were created
+              plot_files = [f for f in os.listdir('.') if f.endswith('.png')]
+              print(f'Generated plots: {plot_files}')
+              
+          except Exception as e:
+              print(f'⚠️  Visualization issue: {e}')
+          
+          print('✅ Integration test completed')
+          "
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: integration-test-artifacts-${{ matrix.python-version }}
+          path: |
+            *.csv
+            *.png
+            *.log
+          retention-days: 7

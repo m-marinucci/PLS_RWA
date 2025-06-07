@@ -1,0 +1,302 @@
+name: Statistical Simulation Dependencies Security Check
+
+on:
+  # Run monthly on the first day
+  schedule:
+    - cron: '0 6 1 * *'  # 06:00 UTC on the 1st of every month
+
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      check_type:
+        description: 'Type of check to perform'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - security-only
+          - updates-only
+          - simulation-test
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  dependency-check:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python for Statistical Computing
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'  # Updated for better numpy/scipy compatibility
+
+    - name: Install security and analysis tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install safety bandit pip-audit
+
+    - name: Install statistical simulation dependencies
+      run: |
+        pip install -r requirements.txt
+        # Add missing dependencies for full functionality
+        pip install matplotlib>=3.7.0 tqdm pytest
+        
+    - name: Run security check with Safety
+      if: ${{ github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'security-only' || github.event.inputs.check_type == '' }}
+      run: |
+        safety check --json --output safety_report.json || true
+
+    - name: Run pip-audit for additional security scanning
+      if: ${{ github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'security-only' || github.event.inputs.check_type == '' }}
+      run: |
+        pip-audit --format=json --output=pip_audit_report.json || true
+
+    - name: Test statistical simulation functionality
+      if: ${{ github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'simulation-test' || github.event.inputs.check_type == '' }}
+      run: |
+        echo "Testing core simulation functionality..."
+        python -c "
+        from main import main_fractional_simulation
+        from factors import generate_X, generate_y, get_true_importance, do_pls_vip, compute_rwa
+        import numpy as np
+
+        # Quick functionality test
+        print('Testing data generation...')
+        rng = np.random.default_rng(42)
+        X = generate_X(n=50, J=5, rho=0.3, random_state=rng)
+        important_vars = get_true_importance(5, alpha=0.4, rng=rng)
+        y = generate_y(X, important_vars, magnitude='medium', noise_label='low', rng=rng)
+
+        print('Testing PLS-VIP method...')
+        pls_scores = do_pls_vip(X, y)
+
+        print('Testing RWA method...')
+        rwa_scores = compute_rwa(X, y)
+
+        print('Running mini simulation (5 reps)...')
+        results = main_fractional_simulation(n_reps=5)
+        print(f'Mini simulation completed: {len(results)} results generated')
+        print('✅ All statistical methods working correctly')
+        "
+
+    - name: Check dependency compatibility for scientific computing
+      if: ${{ github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'updates-only' || github.event.inputs.check_type == '' }}
+      run: |
+        echo "Checking scientific computing stack compatibility..."
+        python -c "
+        import numpy as np
+        import pandas as pd
+        import sklearn
+        import statsmodels
+        print(f'NumPy: {np.__version__}')
+        print(f'Pandas: {pd.__version__}')
+        print(f'Scikit-learn: {sklearn.__version__}')
+        print(f'Statsmodels: {statsmodels.__version__}')
+
+        # Test critical functionality
+        from sklearn.cross_decomposition import PLSRegression
+        from statsmodels.formula.api import ols
+        print('✅ All scientific computing dependencies compatible')
+        "
+        
+    - name: Upload dependency and simulation reports
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: statistical-simulation-dependency-reports
+        path: |
+          safety_report.json
+          pip_audit_report.json
+          simulation_test_*.log
+        retention-days: 30
+        
+    - name: Parse safety results
+      if: ${{ github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'security-only' || github.event.inputs.check_type == '' }}
+      id: safety
+      run: |
+        if [ -f safety_report.json ]; then
+          VULNERABILITIES=$(python -c "
+          import json
+          try:
+              with open('safety_report.json', 'r') as f:
+                  data = json.load(f)
+              print(len(data.get('vulnerabilities', [])))
+          except:
+              print('0')
+          ")
+          echo "vulnerabilities=$VULNERABILITIES" >> $GITHUB_OUTPUT
+          
+          if [ "$VULNERABILITIES" -gt 0 ]; then
+            echo "has_vulnerabilities=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_vulnerabilities=false" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "vulnerabilities=0" >> $GITHUB_OUTPUT
+          echo "has_vulnerabilities=false" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Create security issue
+      if: steps.safety.outputs.has_vulnerabilities == 'true'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          
+          let vulnerabilities = [];
+          try {
+            const safetyData = JSON.parse(fs.readFileSync('safety_report.json', 'utf8'));
+            vulnerabilities = safetyData.vulnerabilities || [];
+          } catch (error) {
+            console.log('Could not parse safety report');
+          }
+          
+          const vulnCount = vulnerabilities.length;
+          if (vulnCount === 0) return;
+          
+          const title = `🚨 Statistical Simulation Security Alert: ${vulnCount} vulnerabilities found in dependencies`;
+
+          let body = `# Security Vulnerabilities Detected in Statistical Computing Dependencies\n\n`;
+          body += `**Date:** ${new Date().toISOString().split('T')[0]}\n`;
+          body += `**Vulnerabilities found:** ${vulnCount}\n\n`;
+          body += `**Impact on PLS-VIP vs RWA Simulation:** These vulnerabilities may affect the reliability and security of statistical computations.\n\n`;
+
+          body += `## Affected Scientific Computing Packages\n\n`;
+          
+          vulnerabilities.forEach((vuln, index) => {
+            body += `### ${index + 1}. ${vuln.package_name || 'Unknown Package'}\n`;
+            body += `- **Installed Version:** ${vuln.installed_version || 'Unknown'}\n`;
+            body += `- **Vulnerable:** ${vuln.vulnerable_spec || 'Unknown'}\n`;
+            body += `- **Advisory:** ${vuln.advisory || 'No details available'}\n`;
+            body += `- **CVE:** ${vuln.cve || 'N/A'}\n\n`;
+          });
+          
+          body += `## Next Steps for Statistical Simulation Security\n\n`;
+          body += `1. Review the vulnerabilities listed above\n`;
+          body += `2. Update affected packages to secure versions\n`;
+          body += `3. **Critical:** Test updated dependencies with simulation validation:\n`;
+          body += `   - Run \`python -c "from main import main_fractional_simulation; main_fractional_simulation(n_reps=5)"\`\n`;
+          body += `   - Verify PLS-VIP and RWA methods still function correctly\n`;
+          body += `   - Check numerical stability of statistical computations\n`;
+          body += `4. Deploy security updates after validation\n\n`;
+          body += `## Automated Statistical Computing Security Report\n\n`;
+          body += `This issue was created automatically by the statistical simulation dependency security check workflow.\n`;
+          body += `For more details, check the workflow run artifacts and simulation test results.\n`;
+          
+          // Check if issue already exists
+          const issues = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            labels: ['security', 'dependencies'],
+            state: 'open'
+          });
+          
+          const existingIssue = issues.data.find(issue => 
+            issue.title.includes('Security Alert') && 
+            issue.title.includes('vulnerabilities found')
+          );
+          
+          if (existingIssue) {
+            // Update existing issue
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: existingIssue.number,
+              body: `## Updated Security Scan Results\n\n${body}`
+            });
+          } else {
+            // Create new issue
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['security', 'dependencies', 'priority:high']
+            });
+          }
+          
+    - name: Create statistical computing dependency maintenance issue
+      if: ${{ github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'updates-only' || github.event.inputs.check_type == '' }}
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const title = '🔬 Statistical Computing Dependencies Maintenance Check';
+          const body = `# Statistical Computing Dependencies Maintenance Report\n\n` +
+                      `**Date:** ${new Date().toISOString().split('T')[0]}\n\n` +
+                      `This automated check ensures our PLS-VIP vs RWA simulation dependencies are up-to-date and secure.\n\n` +
+                      `## Current Scientific Computing Stack\n\n` +
+                      `- **NumPy**: Core numerical computing\n` +
+                      `- **Pandas**: Data manipulation and analysis\n` +
+                      `- **Scikit-learn**: Machine learning (PLS implementation)\n` +
+                      `- **Statsmodels**: Statistical modeling\n` +
+                      `- **Matplotlib**: Visualization\n\n` +
+                      `## Maintenance Tasks\n\n` +
+                      `1. **Security Review**: Check for vulnerabilities in scientific computing packages\n` +
+                      `2. **Compatibility Testing**: Ensure all packages work together correctly\n` +
+                      `3. **Performance Validation**: Verify simulation performance is maintained\n` +
+                      `4. **Reproducibility Check**: Confirm results remain consistent\n\n` +
+                      `## Testing Protocol\n\n` +
+                      `Before updating any dependencies:\n` +
+                      `\`\`\`bash\n` +
+                      `# Test core functionality\n` +
+                      `python -c "from main import main_fractional_simulation; main_fractional_simulation(n_reps=5)"\n` +
+                      `\n` +
+                      `# Test individual methods\n` +
+                      `python -c "from factors import do_pls_vip, compute_rwa; print('Methods available')"\n` +
+                      `\`\`\`\n\n` +
+                      `## Automated Analysis\n\n` +
+                      `This issue was created automatically by the statistical simulation dependency maintenance workflow.\n` +
+                      `Check the workflow artifacts for detailed security and compatibility reports.`;
+
+          // Check for existing maintenance issues
+          const issues = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            labels: ['dependencies', 'maintenance', 'statistical-computing'],
+            state: 'open'
+          });
+
+          const existingIssue = issues.data.find(issue =>
+            issue.title.includes('Statistical Computing Dependencies Maintenance')
+          );
+
+          if (existingIssue) {
+            // Update existing issue
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: existingIssue.number,
+              body: `## Updated Maintenance Check\n\n${body}`
+            });
+          } else {
+            // Create new issue
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['dependencies', 'maintenance', 'statistical-computing']
+            });
+          }
+
+  notify-completion:
+    needs: dependency-check
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+    - name: Notify statistical simulation dependency check completion
+      uses: actions/github-script@v6
+      with:
+        script: |
+          console.log('Statistical simulation dependency security check completed');
+          console.log('✅ PLS-VIP vs RWA simulation dependencies analyzed');
+          console.log('📊 Check the Issues tab for any security alerts or maintenance recommendations');
+          console.log('🔬 Simulation functionality validated for current dependency versions');

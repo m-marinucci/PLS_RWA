@@ -1,0 +1,83 @@
+name: Statistical Simulation Code Enhancement (Sourcery)
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual statistical code enhancement run'
+        required: false
+        default: 'Manual code quality improvement for PLS-VIP vs RWA simulation'
+  pull_request:
+    branches:
+      - main
+      - inc_importance
+    paths:
+      - '**/*.py'
+      - 'requirements.txt'
+  push:
+    branches:
+      - main
+      - inc_importance
+    paths:
+      - '**/*.py'
+
+jobs:
+  statistical-code-enhancement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Sourcery needs the full git history
+
+      - name: Set up Python for Statistical Computing
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install statistical simulation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install matplotlib>=3.7.0 tqdm
+
+      - name: Pre-enhancement validation
+        run: |
+          echo "🔬 Validating statistical simulation code before enhancement..."
+          python -c "
+          # Quick validation that core functionality works
+          try:
+              from main import main_fractional_simulation
+              from factors import do_pls_vip, compute_rwa
+              print('✅ Core statistical methods validated before enhancement')
+          except Exception as e:
+              print(f'❌ Pre-enhancement validation failed: {e}')
+              exit(1)
+          "
+
+      - name: Review statistical simulation code with Sourcery
+        uses: sourcery-ai/action@v1
+        with:
+          token: ${{ secrets.SOURCERY_TOKEN }}
+
+      - name: Post-enhancement validation
+        if: always()
+        run: |
+          echo "🧪 Validating statistical simulation code after enhancement..."
+          python -c "
+          # Ensure enhancements didn't break functionality
+          try:
+              from main import main_fractional_simulation
+              from factors import do_pls_vip, compute_rwa
+
+              # Quick functional test
+              import numpy as np
+              results = main_fractional_simulation(n_reps=2)
+              if len(results) > 0:
+                  print('✅ Statistical simulation functionality preserved after enhancement')
+              else:
+                  print('❌ Enhancement may have broken simulation functionality')
+                  exit(1)
+          except Exception as e:
+              print(f'❌ Post-enhancement validation failed: {e}')
+              exit(1)
+          "
